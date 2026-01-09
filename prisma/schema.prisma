@@ -1,12 +1,12 @@
-// This is your Prisma schema file for SQLite (testing)
+// This is your Prisma schema file
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Order {
@@ -15,10 +15,10 @@ model Order {
   customerName      String
   customerEmail     String
   customerPhone     String?
-  shippingAddress   String      // JSON as string for SQLite
-  items             String      // JSON as string for SQLite
-  totalAmount       Float
-  status            String      @default("PENDING")
+  shippingAddress   Json
+  items             Json
+  totalAmount       Decimal     @db.Decimal(18, 6)
+  status            OrderStatus @default(PENDING)
   paymentMethod     String?
   transactionHash   String?     @unique
   blockNumber       Int?
@@ -27,31 +27,48 @@ model Order {
   token             String?
   merchantAddress   String?
   customerAddress   String?
-  metadata          String?     // JSON as string for SQLite
+  metadata          Json?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   confirmedAt       DateTime?
   fulfilledAt       DateTime?
+
+  @@index([orderId])
+  @@index([transactionHash])
+  @@index([status])
+  @@index([customerEmail])
+}
+
+enum OrderStatus {
+  PENDING
+  PAYMENT_PENDING
+  PAYMENT_CONFIRMED
+  FULFILLED
+  FAILED
+  CANCELLED
 }
 
 model WebhookLog {
   id        String   @id @default(cuid())
   orderId   String
   eventType String
-  payload   String   // JSON as string for SQLite
+  payload   Json
   signature String
   verified  Boolean
   processed Boolean  @default(false)
   error     String?
   createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([processed])
 }
 
 model Configuration {
   id                    String   @id @default(cuid())
   merchantWallet        String
   webhookUrl            String?
-  supportedChains       String   // JSON array as string for SQLite
-  supportedTokens       String   // JSON array as string for SQLite
+  supportedChains       String[]
+  supportedTokens       String[]
   testnetMode           Boolean  @default(false)
   requiredConfirmations Int      @default(12)
   createdAt             DateTime @default(now())
