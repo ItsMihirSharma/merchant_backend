@@ -47,18 +47,20 @@ app.use('/api/config', configRoutes);
 // Error handler (must be last)
 app.use(errorHandler);
 
-// Start server
-server.listen(PORT, () => {
-    console.log('='.repeat(60));
-    console.log('🚀 Web3Pay Merchant Backend Server');
-    console.log('='.repeat(60));
-    console.log(`📡 Server running on port ${PORT}`);
-    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`📬 Webhook endpoint: http://localhost:${PORT}/api/webhooks/payment-confirmation`);
-    console.log(`📊 Health check: http://localhost:${PORT}/health`);
-    console.log(`🔌 WebSocket server: ws://localhost:${PORT}`);
-    console.log('='.repeat(60));
-});
+// Start server only in non-Vercel environment
+if (!process.env.VERCEL) {
+    server.listen(PORT, () => {
+        console.log('='.repeat(60));
+        console.log('🚀 Web3Pay Merchant Backend Server');
+        console.log('='.repeat(60));
+        console.log(`📡 Server running on port ${PORT}`);
+        console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`📬 Webhook endpoint: http://localhost:${PORT}/api/webhooks/payment-confirmation`);
+        console.log(`📊 Health check: http://localhost:${PORT}/health`);
+        console.log(`🔌 WebSocket server: ws://localhost:${PORT}`);
+        console.log('='.repeat(60));
+    });
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
@@ -68,3 +70,6 @@ process.on('SIGTERM', () => {
         process.exit(0);
     });
 });
+
+// Export for Vercel
+export default app;
