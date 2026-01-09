@@ -1,20 +1,17 @@
 {
     "version": 2,
+    "buildCommand": "npm run build",
+    "outputDirectory": "dist",
     "builds": [
         {
-            "src": "src/index.ts",
-            "use": "@vercel/node",
-            "config": {
-                "includeFiles": [
-                    "dist/**"
-                ]
-            }
+            "src": "dist/index.js",
+            "use": "@vercel/node"
         }
     ],
     "routes": [
         {
             "src": "/(.*)",
-            "dest": "src/index.ts"
+            "dest": "dist/index.js"
         }
     ]
 }
