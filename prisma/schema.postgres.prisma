@@ -1,0 +1,86 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Order {
+  id                String      @id @default(cuid())
+  orderId           String      @unique
+  customerName      String
+  customerEmail     String
+  customerPhone     String?
+  shippingAddress   Json
+  items             Json
+  totalAmount       Decimal     @db.Decimal(18, 6)
+  status            OrderStatus @default(PENDING)
+  paymentMethod     String?
+  transactionHash   String?     @unique
+  blockNumber       Int?
+  confirmations     Int         @default(0)
+  chain             String?
+  token             String?
+  merchantAddress   String?
+  customerAddress   String?
+  metadata          Json?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  confirmedAt       DateTime?
+  fulfilledAt       DateTime?
+
+  @@index([orderId])
+  @@index([transactionHash])
+  @@index([status])
+  @@index([customerEmail])
+}
+
+enum OrderStatus {
+  PENDING
+  PAYMENT_PENDING
+  PAYMENT_CONFIRMED
+  FULFILLED
+  FAILED
+  CANCELLED
+}
+
+model WebhookLog {
+  id        String   @id @default(cuid())
+  orderId   String
+  eventType String
+  payload   Json
+  signature String
+  verified  Boolean
+  processed Boolean  @default(false)
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([processed])
+}
+
+model Configuration {
+  id                    String   @id @default(cuid())
+  merchantWallet        String
+  webhookUrl            String?
+  supportedChains       String[]
+  supportedTokens       String[]
+  testnetMode           Boolean  @default(false)
+  requiredConfirmations Int      @default(12)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("admin")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
