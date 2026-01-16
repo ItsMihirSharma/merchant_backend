@@ -190,91 +190,103 @@ export async function handleWebhook(req: Request, res: Response) {
             payloadTimestamp = payloadTimestamp * 1000;
         }
 
-        // Get or create order
-        let order = await prisma.order.findFirst({
-            where: {
-                OR: [
-                    { orderId: payment_id },
-                    { transactionHash: transaction_hash }
-                ]
-            }
-        });
-
-        if (!order) {
-            logger.warn('⚠️  Order not found in database', { paymentId: payment_id });
-            // Still process webhook and generate proof
-        } else {
-            // Update order status
-            order = await prisma.order.update({
-                where: { orderId: order.orderId },
-                data: {
-                    status: type === 'payment.completed' ? 'PAYMENT_CONFIRMED' : 'PAYMENT_PENDING',
-                    transactionHash: transaction_hash,
-                    blockNumber: data.block_number,
-                    confirmations: txVerification.confirmations || 1,
-                    chain: `Chain ${data.chain_id}`,
-                    merchantAddress: merchant,
-                    customerAddress: customer,
-                    confirmedAt: type === 'payment.completed' ? new Date() : undefined
+        // Get or create order (optional - database may not be configured)
+        let order = null;
+        try {
+            order = await prisma.order.findFirst({
+                where: {
+                    OR: [
+                        { orderId: payment_id },
+                        { transactionHash: transaction_hash }
+                    ]
                 }
             });
 
-            logger.info('✅ Order updated', {
-                orderId: order.orderId,
-                status: order.status
-            });
-
-            // Send email notification
-            try {
-                await sendPaymentReceivedEmail(
-                    order.customerEmail,
-                    payment_id,
-                    amount,
-                    transaction_hash
-                );
-            } catch (emailError) {
-                logger.error('Failed to send email', { error: emailError });
-            }
-
-            // Emit WebSocket event
-            try {
-                emitPaymentReceived(order.orderId, {
-                    orderId: order.orderId,
-                    status: order.status,
-                    transactionHash: transaction_hash,
-                    confirmations: txVerification.confirmations || 1
+            if (!order) {
+                logger.warn('⚠️  Order not found in database', { paymentId: payment_id });
+                // Still process webhook and generate proof
+            } else {
+                // Update order status
+                order = await prisma.order.update({
+                    where: { orderId: order.orderId },
+                    data: {
+                        status: type === 'payment.completed' ? 'PAYMENT_CONFIRMED' : 'PAYMENT_PENDING',
+                        transactionHash: transaction_hash,
+                        blockNumber: data.block_number,
+                        confirmations: txVerification.confirmations || 1,
+                        chain: `Chain ${data.chain_id}`,
+                        merchantAddress: merchant,
+                        customerAddress: customer,
+                        confirmedAt: type === 'payment.completed' ? new Date() : undefined
+                    }
                 });
-            } catch (wsError) {
-                logger.error('Failed to emit WebSocket event', { error: wsError });
-            }
 
-            // Start confirmation monitoring
-            if (type === 'payment.pending' || type === 'payment.completed') {
+                logger.info('✅ Order updated', {
+                    orderId: order.orderId,
+                    status: order.status
+                });
+
+                // Send email notification
                 try {
-                    const io = getIO();
-                    startConfirmationMonitoring(
-                        order.orderId,
-                        transaction_hash,
-                        data.chain_id.toString(),
-                        io
+                    await sendPaymentReceivedEmail(
+                        order.customerEmail,
+                        payment_id,
+                        amount,
+                        transaction_hash
                     );
-                } catch (monitorError) {
-                    logger.error('Failed to start confirmation monitoring', { error: monitorError });
+                } catch (emailError) {
+                    logger.error('Failed to send email', { error: emailError });
+                }
+
+                // Emit WebSocket event
+                try {
+                    emitPaymentReceived(order.orderId, {
+                        orderId: order.orderId,
+                        status: order.status,
+                        transactionHash: transaction_hash,
+                        confirmations: txVerification.confirmations || 1
+                    });
+                } catch (wsError) {
+                    logger.error('Failed to emit WebSocket event', { error: wsError });
+                }
+
+                // Start confirmation monitoring
+                if (type === 'payment.pending' || type === 'payment.completed') {
+                    try {
+                        const io = getIO();
+                        startConfirmationMonitoring(
+                            order.orderId,
+                            transaction_hash,
+                            data.chain_id.toString(),
+                            io
+                        );
+                    } catch (monitorError) {
+                        logger.error('Failed to start confirmation monitoring', { error: monitorError });
+                    }
                 }
             }
+        } catch (dbError) {
+            // Database not configured or table doesn't exist - continue without DB
+            logger.warn('⚠️  Database operation skipped (not configured)', {
+                error: dbError instanceof Error ? dbError.message : 'Unknown error'
+            });
         }
 
-        // Log webhook
-        const webhookLog = await prisma.webhookLog.create({
-            data: {
-                orderId: payment_id,
-                eventType: type,
-                payload: JSON.stringify(data),
-                signature: listenerSignature || '',
-                verified: true,
-                processed: true
-            }
-        });
+        // Log webhook (optional - database may not be configured)
+        try {
+            const webhookLog = await prisma.webhookLog.create({
+                data: {
+                    orderId: payment_id,
+                    eventType: type,
+                    payload: JSON.stringify(data),
+                    signature: listenerSignature || '',
+                    verified: true,
+                    processed: true
+                }
+            });
+        } catch (dbError) {
+            logger.warn('⚠️  Webhook log skipped (database not configured)');
+        }
 
         // ============ STEP 7: GENERATE MERCHANT PROOF ============
         let merchantProof;
